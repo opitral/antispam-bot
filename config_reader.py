@@ -1,11 +1,13 @@
+from typing import Set
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr
 
 
 class Settings(BaseSettings):
     bot_token: SecretStr
-    admin_telegram_id: int
-    db_name: str
+    database_url: str
+    admin_telegram_ids: Set[int]
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
