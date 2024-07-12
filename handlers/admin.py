@@ -1,3 +1,4 @@
+import logging
 from contextlib import suppress
 
 from aiogram import Router, F, html
@@ -7,11 +8,11 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
-
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Chat, DefaultMessage
+from database.models import Chat
+from database.orm_queries import find_chat_by_telegram_id, add_chat, set_chat_title, find_chat_by_id, \
+    set_chat_allowed_members, set_chat_arab_filter_flag, delete_chat, get_default_message_latest, add_default_message
 from keyboards.admin import get_start_menu, get_chat_settings_menu, get_delete_request_menu, get_cancel_menu
 from keyboards.admin import ChatSettingsCbData, SettingType
 from filters.chat_type import ChatTypeFilter, IsAdminFilter
@@ -41,26 +42,21 @@ async def command_start(message: Message):
 
 @router.message(F.chat_shared)
 async def add_group_to_white_list(message: Message, session: AsyncSession):
-    new_chat = Chat(
-        telegram_id=str(message.chat_shared.chat_id),
-        title=message.chat_shared.title
-    )
+    chat_shared_telegram_id = str(message.chat_shared.chat_id)
+    chat_shared_title = message.chat_shared.title
 
-    result = await session.execute(select(Chat).where(Chat.telegram_id == new_chat.telegram_id))
-    found_chat = result.scalars().first()
+    found_chat = await find_chat_by_telegram_id(session, chat_shared_telegram_id)
 
     if found_chat:
-        if found_chat.title != new_chat.title:
-            found_chat.title = new_chat.title
-            await session.commit()
+        if found_chat.title != chat_shared_title:
+            await set_chat_title(session, found_chat, chat_shared_title)
             await message.answer("Название чата обновлено")
 
         else:
             await message.answer("Этот чат уже добавлен")
 
     else:
-        session.add(new_chat)
-        await session.commit()
+        new_chat = await add_chat(session, chat_shared_telegram_id, chat_shared_title)
 
         await message.answer(
             text=get_chat_info(new_chat),
@@ -75,8 +71,7 @@ async def get_white_list(message: Message, session: AsyncSession):
 
 @router.callback_query(ChatSettingsCbData.filter(F.setting_type == SettingType.members_count))
 async def change_allowed_members(callback: CallbackQuery, callback_data: ChatSettingsCbData, session: AsyncSession):
-    result = await session.execute(select(Chat).where(Chat.id == callback_data.chat_id))
-    found_chat = result.scalars().first()
+    found_chat = await find_chat_by_id(session, callback_data.chat_id)
 
     if not found_chat:
         return await callback.answer("Чат не найден")
@@ -89,9 +84,7 @@ async def change_allowed_members(callback: CallbackQuery, callback_data: ChatSet
     elif new_allowed_members > 1000:
         return await callback.answer("Установлено максимальное значение")
 
-    found_chat.allowed_members = new_allowed_members
-    await session.commit()
-    await session.refresh(found_chat)
+    found_chat = await set_chat_allowed_members(session, found_chat, new_allowed_members)
 
     with suppress(TelegramBadRequest):
         await callback.message.edit_text(
@@ -103,8 +96,7 @@ async def change_allowed_members(callback: CallbackQuery, callback_data: ChatSet
 
 @router.callback_query(ChatSettingsCbData.filter(F.setting_type == SettingType.arab_filter_flag))
 async def change_arab_filter_flag(callback: CallbackQuery, callback_data: ChatSettingsCbData, session: AsyncSession):
-    result = await session.execute(select(Chat).where(Chat.id == callback_data.chat_id))
-    found_chat = result.scalars().first()
+    found_chat = await find_chat_by_id(session, callback_data.chat_id)
 
     if not found_chat:
         return await callback.answer("Чат не найден")
@@ -113,9 +105,7 @@ async def change_arab_filter_flag(callback: CallbackQuery, callback_data: ChatSe
         await callback.answer(f"Фильтр уже {'включен' if found_chat.arab_filter_flag else 'выключен'}")
 
     else:
-        found_chat.arab_filter_flag = callback_data.value
-        await session.commit()
-        await session.refresh(found_chat)
+        await set_chat_arab_filter_flag(session, found_chat, callback_data.value)
 
     await callback.message.edit_text(
         text=get_chat_info(found_chat),
@@ -126,8 +116,7 @@ async def change_arab_filter_flag(callback: CallbackQuery, callback_data: ChatSe
 
 @router.callback_query(ChatSettingsCbData.filter(F.setting_type == SettingType.delete_request))
 async def make_delete_request(callback: CallbackQuery, callback_data: ChatSettingsCbData, session: AsyncSession):
-    result = await session.execute(select(Chat).where(Chat.id == callback_data.chat_id))
-    found_chat = result.scalars().first()
+    found_chat = await find_chat_by_id(session, callback_data.chat_id)
 
     if not found_chat:
         return await callback.answer("Чат не найден")
@@ -141,14 +130,12 @@ async def make_delete_request(callback: CallbackQuery, callback_data: ChatSettin
 
 @router.callback_query(ChatSettingsCbData.filter(F.setting_type == SettingType.delete_submit))
 async def make_delete_submit(callback: CallbackQuery, callback_data: ChatSettingsCbData, session: AsyncSession):
-    result = await session.execute(select(Chat).where(Chat.id == callback_data.chat_id))
-    found_chat = result.scalars().first()
+    found_chat = await find_chat_by_id(session, callback_data.chat_id)
 
     if not found_chat:
         return await callback.answer("Чат не найден")
 
-    await session.delete(found_chat)
-    await session.commit()
+    await delete_chat(session, found_chat)
 
     await callback.message.edit_text(
         text=f"Чат {html.bold(html.quote(found_chat.title))} удален",
@@ -159,8 +146,7 @@ async def make_delete_submit(callback: CallbackQuery, callback_data: ChatSetting
 
 @router.callback_query(ChatSettingsCbData.filter(F.setting_type == SettingType.delete_cancel))
 async def make_delete_cancel(callback: CallbackQuery, callback_data: ChatSettingsCbData, session: AsyncSession):
-    result = await session.execute(select(Chat).where(Chat.id == callback_data.chat_id))
-    found_chat = result.scalars().first()
+    found_chat = await find_chat_by_id(session, callback_data.chat_id)
 
     if not found_chat:
         return await callback.answer("Чат не найден")
@@ -179,8 +165,7 @@ class SetDefaultMessage(StatesGroup):
 
 @router.message(F.text.lower().contains("дефолтное сообщение"))
 async def set_default_message_request(message: Message, session: AsyncSession, state: FSMContext):
-    result = await session.execute(select(DefaultMessage).order_by(DefaultMessage.created_at.desc()).limit(1))
-    latest_default_message = result.scalars().first()
+    latest_default_message = await get_default_message_latest(session)
     await message.answer(
         f"{html.bold('Текущее сообщение')}\n\n"
         f"{html.quote(latest_default_message.text) if latest_default_message else 'Не установлено'}",
@@ -201,9 +186,7 @@ async def set_default_message(message: Message, session: AsyncSession, state: FS
     await state.update_data(new_default_message_text=message.text.lower())
     admin_data = await state.get_data()
 
-    new_default_message = DefaultMessage(text=admin_data["new_default_message_text"])
-    session.add(new_default_message)
-    await session.commit()
+    await add_default_message(session, admin_data["new_default_message_text"])
 
     await message.answer("Новое дефолтное сообщение установлено", reply_markup=get_start_menu())
     await state.clear()

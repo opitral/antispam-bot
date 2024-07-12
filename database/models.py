@@ -5,8 +5,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
-    created_at: Mapped[DateTime] = mapped_column(DateTime, default=datetime.now())
-    updated_at: Mapped[DateTime] = mapped_column(DateTime, default=datetime.now(), onupdate=datetime.now())
+    created_at: Mapped[DateTime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class Chat(Base):
