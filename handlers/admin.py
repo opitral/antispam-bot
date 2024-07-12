@@ -4,16 +4,17 @@ from aiogram import Router, F, html
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Chat
-from keyboards.admin import get_start_menu, get_chat_settings_menu, get_delete_request_menu
+from database.models import Chat, DefaultMessage
+from keyboards.admin import get_start_menu, get_chat_settings_menu, get_delete_request_menu, get_cancel_menu
 from keyboards.admin import ChatSettingsCbData, SettingType
 from filters.chat_type import ChatTypeFilter, IsAdminFilter
-
 
 router = Router()
 router.message.filter(ChatTypeFilter(is_group=False), IsAdminFilter())
@@ -170,6 +171,47 @@ async def make_delete_cancel(callback: CallbackQuery, callback_data: ChatSetting
             reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
         )
     await callback.answer()
+
+
+class SetDefaultMessage(StatesGroup):
+    setting_new_default_message = State()
+
+
+@router.message(F.text.lower().contains("дефолтное сообщение"))
+async def set_default_message_request(message: Message, session: AsyncSession, state: FSMContext):
+    result = await session.execute(select(DefaultMessage).order_by(DefaultMessage.created_at.desc()).limit(1))
+    latest_default_message = result.scalars().first()
+    await message.answer(
+        f"{html.bold('Текущее сообщение')}\n\n"
+        f"{html.quote(latest_default_message.text) if latest_default_message else 'Не установлено'}",
+        parse_mode=ParseMode.HTML
+    )
+    await message.answer(f"Отправьте мне новое сообщение", reply_markup=get_cancel_menu())
+    await state.set_state(SetDefaultMessage.setting_new_default_message)
+
+
+@router.message(SetDefaultMessage.setting_new_default_message, F.text.lower().contains("отменить"))
+async def set_default_message_cancel(message: Message, state: FSMContext):
+    await message.answer(text="Действие отменено", reply_markup=get_start_menu())
+    await state.clear()
+
+
+@router.message(SetDefaultMessage.setting_new_default_message, F.text)
+async def set_default_message(message: Message, session: AsyncSession, state: FSMContext):
+    await state.update_data(new_default_message_text=message.text.lower())
+    admin_data = await state.get_data()
+
+    new_default_message = DefaultMessage(text=admin_data["new_default_message_text"])
+    session.add(new_default_message)
+    await session.commit()
+
+    await message.answer("Новое дефолтное сообщение установлено", reply_markup=get_start_menu())
+    await state.clear()
+
+
+@router.message(SetDefaultMessage.setting_new_default_message)
+async def set_default_message_unknown(message: Message, session: AsyncSession, state: FSMContext):
+    await message.answer("Отправьте мне текстовое сообщение")
 
 
 @router.message()

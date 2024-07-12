@@ -33,8 +33,9 @@ def get_start_menu() -> ReplyKeyboardMarkup:
             request_username=True
         )
     )
+    kb.button(text="✏️ Дефолтное сообщение")
 
-    kb.adjust(2)
+    kb.adjust(2, 1)
     return kb.as_markup(resize_keyboard=True)
 
 
@@ -96,3 +97,10 @@ def get_delete_request_menu(chat_id: int) -> InlineKeyboardMarkup:
     kb.adjust(2)
 
     return kb.as_markup()
+
+
+def get_cancel_menu() -> ReplyKeyboardMarkup:
+    kb = ReplyKeyboardBuilder()
+    kb.button(text="⬅️ Отменить")
+
+    return kb.as_markup(resize_keyboard=True)

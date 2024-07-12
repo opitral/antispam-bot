@@ -51,8 +51,7 @@ async def main():
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
-    admin.router.message.middleware(DatabaseSessionMiddleware(session_pool=session_maker))
-    admin.router.callback_query.middleware(DatabaseSessionMiddleware(session_pool=session_maker))
+    dp.update.middleware(DatabaseSessionMiddleware(session_pool=session_maker))
 
     dp.include_router(admin.router)
     dp.include_router(user.router)

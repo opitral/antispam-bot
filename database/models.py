@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, Boolean, ForeignKey, Integer
+from sqlalchemy import String, DateTime, Boolean, ForeignKey, Integer, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -48,3 +48,9 @@ class ChatsMembers(Base):
 
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id", ondelete="SET NULL"), primary_key=True)
     member_id: Mapped[int] = mapped_column(ForeignKey("member.id", ondelete="SET NULL"), primary_key=True)
+
+
+class DefaultMessage(Base):
+    __tablename__ = "default_message"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
