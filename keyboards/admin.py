@@ -104,3 +104,5 @@ def get_cancel_menu() -> ReplyKeyboardMarkup:
     kb.button(text="⬅️ Отменить")
 
     return kb.as_markup(resize_keyboard=True)
+
+

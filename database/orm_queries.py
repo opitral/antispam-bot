@@ -7,13 +7,15 @@ from database.models import Chat, DefaultMessage
 
 
 async def find_chat_by_telegram_id(session: AsyncSession, telegram_id: str) -> Chat:
-    result = await session.execute(select(Chat).where(Chat.telegram_id == telegram_id))
+    query = select(Chat).where(Chat.telegram_id == telegram_id)
+    result = await session.execute(query)
     found_chat = result.scalars().first()
     return found_chat
 
 
 async def find_chat_by_id(session: AsyncSession, _id: int) -> Chat:
-    result = await session.execute(select(Chat).where(Chat.id == _id))
+    query = select(Chat).where(Chat.id == _id)
+    result = await session.execute(query)
     found_chat = result.scalars().first()
     return found_chat
 
@@ -32,7 +34,8 @@ async def set_chat_title(session: AsyncSession, chat: Chat, title: str) -> Chat:
 
 
 async def get_all_chats(session: AsyncSession) -> Sequence[Chat]:
-    result = await session.execute(select(Chat))
+    query = select(Chat)
+    result = await session.execute(query)
     all_chats = result.scalars().all()
     return all_chats
 
@@ -55,7 +58,8 @@ async def delete_chat(session: AsyncSession, chat: Chat):
 
 
 async def get_default_message_latest(session: AsyncSession) -> DefaultMessage:
-    result = await session.execute(select(DefaultMessage).order_by(DefaultMessage.created_at.desc()).limit(1))
+    query = select(DefaultMessage).order_by(DefaultMessage.created_at.desc()).limit(1)
+    result = await session.execute(query)
     default_message = result.scalars().first()
     return default_message
 
