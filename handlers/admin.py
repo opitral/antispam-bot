@@ -1,4 +1,4 @@
-import logging
+import math
 from contextlib import suppress
 
 from aiogram import Router, F, html
@@ -10,18 +10,21 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config_reader import config
 from database.models import Chat
 from database.orm_queries import find_chat_by_telegram_id, add_chat, set_chat_title, find_chat_by_id, \
-    set_chat_allowed_members, set_chat_arab_filter_flag, delete_chat, get_default_message_latest, add_default_message
-from keyboards.admin import get_start_menu, get_chat_settings_menu, get_delete_request_menu, get_cancel_menu
-from keyboards.admin import ChatSettingsCbData, SettingType
+    set_chat_allowed_members, set_chat_arab_filter_flag, delete_chat, get_default_message_latest, add_default_message, \
+    get_all_chats
+from keyboards.admin import get_start_menu, get_chat_settings_menu, get_delete_request_menu, get_cancel_menu, \
+    get_all_chats_menu
+from keyboards.admin import ChatSettingsCbData, SettingType, ChatInfoCbData, PaginationCbData
 from filters.chat_type import ChatTypeFilter, IsAdminFilter
 
 router = Router()
 router.message.filter(ChatTypeFilter(is_group=False), IsAdminFilter())
 
 
-def get_chat_info(chat: Chat):
+def get_chat_info_text(chat: Chat):
     return (
         f"⭐️ ID: {chat.id}\n"
         f"📱 Telegram ID: {chat.telegram_id}\n"
@@ -59,14 +62,55 @@ async def add_group_to_white_list(message: Message, session: AsyncSession):
         new_chat = await add_chat(session, chat_shared_telegram_id, chat_shared_title)
 
         await message.answer(
-            text=get_chat_info(new_chat),
+            text=get_chat_info_text(new_chat),
             reply_markup=get_chat_settings_menu(new_chat.id, bool(new_chat.arab_filter_flag))
         )
 
 
 @router.message(F.text.lower().contains("мои чаты"))
 async def get_white_list(message: Message, session: AsyncSession):
-    await message.answer("В разработке")
+    chats = await get_all_chats(session)
+    if chats:
+        await message.answer(f"Всего добавлено чатов: {len(chats)}", reply_markup=await get_all_chats_menu(chats))
+
+    else:
+        await message.answer("У вас нету добавленных чатов")
+
+
+@router.callback_query(ChatInfoCbData.filter())
+async def get_chat_info(callback: CallbackQuery, callback_data: ChatInfoCbData, session: AsyncSession):
+    found_chat = await find_chat_by_id(session, callback_data.chat_id)
+    if not found_chat:
+        return await callback.answer("Чат не найден")
+
+    await callback.message.edit_text(
+        text=get_chat_info_text(found_chat),
+        reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
+    )
+    await callback.answer()
+
+
+@router.callback_query(PaginationCbData.filter())
+async def make_pagination(callback: CallbackQuery, callback_data: PaginationCbData, session: AsyncSession):
+    page = callback_data.page
+    limit = config.page_limit
+    chats = await get_all_chats(session)
+
+    if chats:
+        max_page = math.ceil(len(chats) / limit) - 1
+        if page > max_page or page < 0:
+            await callback.answer("Такой страницы не существует")
+            page = 0
+
+        with suppress(TelegramBadRequest):
+            await callback.message.edit_text(
+                f"Всего добавлено чатов: {len(chats)}",
+                reply_markup=await get_all_chats_menu(chats, page=page))
+
+    else:
+        await callback.message.edit_text("У вас нету добавленных чатов")
+
+    await callback.answer()
 
 
 @router.callback_query(ChatSettingsCbData.filter(F.setting_type == SettingType.members_count))
@@ -88,7 +132,7 @@ async def change_allowed_members(callback: CallbackQuery, callback_data: ChatSet
 
     with suppress(TelegramBadRequest):
         await callback.message.edit_text(
-            text=get_chat_info(found_chat),
+            text=get_chat_info_text(found_chat),
             reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
         )
     await callback.answer()
@@ -108,7 +152,7 @@ async def change_arab_filter_flag(callback: CallbackQuery, callback_data: ChatSe
         await set_chat_arab_filter_flag(session, found_chat, callback_data.value)
 
     await callback.message.edit_text(
-        text=get_chat_info(found_chat),
+        text=get_chat_info_text(found_chat),
         reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
     )
     await callback.answer()
@@ -153,7 +197,7 @@ async def make_delete_cancel(callback: CallbackQuery, callback_data: ChatSetting
 
     with suppress(TelegramBadRequest):
         await callback.message.edit_text(
-            text=get_chat_info(found_chat),
+            text=get_chat_info_text(found_chat),
             reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
         )
     await callback.answer()
@@ -193,10 +237,15 @@ async def set_default_message(message: Message, session: AsyncSession, state: FS
 
 
 @router.message(SetDefaultMessage.setting_new_default_message)
-async def set_default_message_unknown(message: Message, session: AsyncSession, state: FSMContext):
+async def set_default_message_unknown(message: Message):
     await message.answer("Отправьте мне текстовое сообщение")
 
 
 @router.message()
-async def unknown_command(message: Message):
+async def unknown_message(message: Message):
     await message.answer("Неизвестная команда", reply_markup=get_start_menu())
+
+
+@router.callback_query()
+async def unknown_callback(callback: CallbackQuery):
+    await callback.answer()

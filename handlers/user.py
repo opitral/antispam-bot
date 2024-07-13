@@ -1,10 +1,7 @@
 from aiogram import Router
 from aiogram.types import Message
-
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import DefaultMessage
 from database.orm_queries import get_default_message_latest
 from filters.chat_type import ChatTypeFilter
 

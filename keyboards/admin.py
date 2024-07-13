@@ -1,9 +1,13 @@
+import math
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional, Union, Sequence
 
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButtonRequestChat, InlineKeyboardMarkup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButtonRequestChat, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
+
+from config_reader import config
+from database.models import Chat
 
 
 class SettingType(str, Enum):
@@ -106,3 +110,39 @@ def get_cancel_menu() -> ReplyKeyboardMarkup:
     return kb.as_markup(resize_keyboard=True)
 
 
+class ChatInfoCbData(CallbackData, prefix="chat_info"):
+    chat_id: int
+
+
+class PaginationCbData(CallbackData, prefix="pagination"):
+    page: int
+
+
+async def get_all_chats_menu(chats: Sequence[Chat], page: int = 0) -> InlineKeyboardMarkup:
+    limit = config.page_limit
+    start_offset = page * limit
+    end_offset = start_offset + limit
+    index = 1
+
+    kb = InlineKeyboardBuilder()
+
+    for chat in chats[start_offset:end_offset]:
+        kb.row(InlineKeyboardButton(
+            text=f"{start_offset + index}. {chat.title}",
+            callback_data=ChatInfoCbData(chat_id=chat.id).pack()
+        ))
+        index += 1
+
+    pages_count = math.ceil(len(chats) / limit)
+    previous_page = (page - 1) if page > 0 else pages_count - 1
+    next_page = (page + 1) if end_offset < len(chats) else 0
+
+    pagination_buttons = [
+        InlineKeyboardButton(text="⬅️", callback_data=PaginationCbData(page=previous_page).pack()),
+        InlineKeyboardButton(text=f"{page+1}/{pages_count}", callback_data="none"),
+        InlineKeyboardButton(text="➡️", callback_data=PaginationCbData(page=next_page).pack())
+    ]
+
+    kb.row(*pagination_buttons)
+
+    return kb.as_markup()

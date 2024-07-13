@@ -34,7 +34,7 @@ async def set_chat_title(session: AsyncSession, chat: Chat, title: str) -> Chat:
 
 
 async def get_all_chats(session: AsyncSession) -> Sequence[Chat]:
-    query = select(Chat)
+    query = select(Chat).order_by(Chat.created_at.desc())
     result = await session.execute(query)
     all_chats = result.scalars().all()
     return all_chats
