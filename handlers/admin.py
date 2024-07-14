@@ -34,7 +34,7 @@ async def get_chat_info_text(session: AsyncSession, chat: Chat):
 
     return (
         f"⭐️ ID: {chat.id}\n"
-        f"📱 Telegram ID: {escape(chat.telegram_id)}\n"
+        f"📱 Telegram ID: <code>{escape(chat.telegram_id)}</code>\n"
         f"✏️ Название: {title}\n"
         f"👥 Разрешено пользователей: {chat.allowed_members}\n"
         f"{'🟢' if chat.arab_filter_flag else '🔴'} Фильтр чурок: {'включен' if chat.arab_filter_flag else 'выключен'}\n"
