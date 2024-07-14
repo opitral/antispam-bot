@@ -7,8 +7,7 @@ from aiogram import Bot, Dispatcher
 from database.engine import create_db, drop_db, session_maker
 from middlewares.db import DatabaseSessionMiddleware
 
-from handlers import admin
-from handlers import user
+from handlers import user, admin, group
 
 from config_reader import config
 
@@ -37,7 +36,7 @@ async def main():
     logging.basicConfig(level=logging.INFO)
 
     file_handler = logging.FileHandler("bot.log")
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(logging.WARNING)
 
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     file_handler.setFormatter(formatter)
@@ -55,6 +54,7 @@ async def main():
 
     dp.include_router(admin.router)
     dp.include_router(user.router)
+    dp.include_router(group.router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
