@@ -1,5 +1,6 @@
 import math
 from contextlib import suppress
+from html import escape
 
 from aiogram import Router, F, html
 from aiogram.enums import ParseMode
@@ -14,7 +15,7 @@ from config_reader import config
 from database.models import Chat
 from database.orm_queries import find_chat_by_telegram_id, add_chat, set_chat_title, find_chat_by_id, \
     set_chat_allowed_members, set_chat_arab_filter_flag, delete_chat, get_default_message_latest, add_default_message, \
-    get_all_chats
+    get_all_chats, count_members
 from keyboards.admin import get_start_menu, get_chat_settings_menu, get_delete_request_menu, get_cancel_menu, \
     get_all_chats_menu
 from keyboards.admin import ChatSettingsCbData, SettingType, ChatInfoCbData, PaginationCbData
@@ -24,14 +25,22 @@ router = Router()
 router.message.filter(ChatTypeFilter(is_group=False), IsAdminFilter())
 
 
-def get_chat_info_text(chat: Chat):
+async def get_chat_info_text(session: AsyncSession, chat: Chat):
+    total = await count_members(session, chat.id, ["join", "ban_by_join", "ban_by_filter"])
+    ban_by_join = await count_members(session, chat.id, ["ban_by_join"])
+    ban_by_filter = await count_members(session, chat.id, ["ban_by_filter"])
+
     return (
         f"⭐️ ID: {chat.id}\n"
-        f"📱 Telegram ID: {chat.telegram_id}\n"
+        f"📱 Telegram ID: {escape(chat.telegram_id)}\n"
         f"✏️ Название: {chat.title}\n"
         f"👥 Разрешено пользователей: {chat.allowed_members}\n"
         f"{'🟢' if chat.arab_filter_flag else '🔴'} Фильтр чурок: {'включен' if chat.arab_filter_flag else 'выключен'}\n"
-        f"📅 Дата добавления: {chat.created_at.strftime('%Y-%m-%d %H:%M')}"
+        f"📅 Дата добавления: {chat.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+        f"{html.bold('📊 Статистика за день')}\n"
+        f"Всего присоединилось: {total}\n"
+        f"Заблокированы по лимиту: {ban_by_join}\n"
+        f"Заблокированы по фильтру: {ban_by_filter}"
     )
 
 
@@ -62,8 +71,9 @@ async def add_group_to_white_list(message: Message, session: AsyncSession):
         new_chat = await add_chat(session, chat_shared_telegram_id, chat_shared_title)
 
         await message.answer(
-            text=get_chat_info_text(new_chat),
-            reply_markup=get_chat_settings_menu(new_chat.id, bool(new_chat.arab_filter_flag))
+            text=await get_chat_info_text(session, new_chat),
+            reply_markup=get_chat_settings_menu(new_chat.id, bool(new_chat.arab_filter_flag)),
+            parse_mode=ParseMode.HTML
         )
 
 
@@ -84,8 +94,9 @@ async def get_chat_info(callback: CallbackQuery, callback_data: ChatInfoCbData, 
         return await callback.answer("Чат не найден")
 
     await callback.message.edit_text(
-        text=get_chat_info_text(found_chat),
-        reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
+        text=await get_chat_info_text(session, found_chat),
+        reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
+        parse_mode=ParseMode.HTML
     )
     await callback.answer()
 
@@ -132,8 +143,9 @@ async def change_allowed_members(callback: CallbackQuery, callback_data: ChatSet
 
     with suppress(TelegramBadRequest):
         await callback.message.edit_text(
-            text=get_chat_info_text(found_chat),
-            reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
+            text=await get_chat_info_text(session, found_chat),
+            reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
+            parse_mode=ParseMode.HTML
         )
     await callback.answer()
 
@@ -152,8 +164,9 @@ async def change_arab_filter_flag(callback: CallbackQuery, callback_data: ChatSe
         await set_chat_arab_filter_flag(session, found_chat, callback_data.value)
 
     await callback.message.edit_text(
-        text=get_chat_info_text(found_chat),
-        reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
+        text=await get_chat_info_text(session, found_chat),
+        reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
+        parse_mode=ParseMode.HTML
     )
     await callback.answer()
 
@@ -166,7 +179,7 @@ async def make_delete_request(callback: CallbackQuery, callback_data: ChatSettin
         return await callback.answer("Чат не найден")
 
     await callback.message.edit_text(
-        text=f"Вы уверены, что хотите удалить чат {html.bold(html.quote(found_chat.title))}?",
+        text=f"Вы уверены, что хотите удалить чат {html.bold(escape(found_chat.title))}?",
         reply_markup=get_delete_request_menu(found_chat.id),
         parse_mode=ParseMode.HTML
     )
@@ -182,7 +195,7 @@ async def make_delete_submit(callback: CallbackQuery, callback_data: ChatSetting
     await delete_chat(session, found_chat)
 
     await callback.message.edit_text(
-        text=f"Чат {html.bold(html.quote(found_chat.title))} удален",
+        text=f"Чат {html.bold(escape(found_chat.title))} удален",
         parse_mode=ParseMode.HTML
     )
     await callback.answer()
@@ -197,8 +210,9 @@ async def make_delete_cancel(callback: CallbackQuery, callback_data: ChatSetting
 
     with suppress(TelegramBadRequest):
         await callback.message.edit_text(
-            text=get_chat_info_text(found_chat),
-            reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag))
+            text=await get_chat_info_text(session, found_chat),
+            reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
+            parse_mode=ParseMode.HTML
         )
     await callback.answer()
 
@@ -212,7 +226,7 @@ async def set_default_message_request(message: Message, session: AsyncSession, s
     latest_default_message = await get_default_message_latest(session)
     await message.answer(
         f"{html.bold('Текущее сообщение')}\n\n"
-        f"{html.quote(latest_default_message.text) if latest_default_message else 'Не установлено'}",
+        f"{escape(latest_default_message.text) if latest_default_message else 'Не установлено'}",
         parse_mode=ParseMode.HTML
     )
     await message.answer(f"Отправьте мне новое сообщение", reply_markup=get_cancel_menu())
