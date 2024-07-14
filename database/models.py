@@ -15,6 +15,7 @@ class Chat(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     telegram_id: Mapped[str] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    username: Mapped[str] = mapped_column(String(255), nullable=True)
     allowed_members: Mapped[int] = mapped_column(Integer, default=200, nullable=False)
     arab_filter_flag: Mapped[Boolean] = mapped_column(Boolean, default=True, nullable=False)
 

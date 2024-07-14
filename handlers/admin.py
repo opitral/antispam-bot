@@ -26,6 +26,8 @@ router.message.filter(ChatTypeFilter(is_group=False), IsAdminFilter())
 
 
 async def get_chat_info_text(session: AsyncSession, chat: Chat):
+    title = f"<a href='https://t.me/{chat.username}'>{chat.title}</a>" if chat.username else chat.title
+
     total = await count_members(session, chat.id, ["join", "ban_by_join", "ban_by_filter"])
     ban_by_join = await count_members(session, chat.id, ["ban_by_join"])
     ban_by_filter = await count_members(session, chat.id, ["ban_by_filter"])
@@ -33,7 +35,7 @@ async def get_chat_info_text(session: AsyncSession, chat: Chat):
     return (
         f"⭐️ ID: {chat.id}\n"
         f"📱 Telegram ID: {escape(chat.telegram_id)}\n"
-        f"✏️ Название: {chat.title}\n"
+        f"✏️ Название: {title}\n"
         f"👥 Разрешено пользователей: {chat.allowed_members}\n"
         f"{'🟢' if chat.arab_filter_flag else '🔴'} Фильтр чурок: {'включен' if chat.arab_filter_flag else 'выключен'}\n"
         f"📅 Дата добавления: {chat.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
@@ -56,6 +58,7 @@ async def command_start(message: Message):
 async def add_group_to_white_list(message: Message, session: AsyncSession):
     chat_shared_telegram_id = str(message.chat_shared.chat_id)
     chat_shared_title = message.chat_shared.title
+    chat_shared_username = message.chat_shared.username
 
     found_chat = await find_chat_by_telegram_id(session, chat_shared_telegram_id)
 
@@ -68,12 +71,13 @@ async def add_group_to_white_list(message: Message, session: AsyncSession):
             await message.answer("Этот чат уже добавлен")
 
     else:
-        new_chat = await add_chat(session, chat_shared_telegram_id, chat_shared_title)
+        new_chat = await add_chat(session, chat_shared_telegram_id, chat_shared_title, chat_shared_username)
 
         await message.answer(
             text=await get_chat_info_text(session, new_chat),
             reply_markup=get_chat_settings_menu(new_chat.id, bool(new_chat.arab_filter_flag)),
-            parse_mode=ParseMode.HTML
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
         )
 
 
@@ -96,7 +100,8 @@ async def get_chat_info(callback: CallbackQuery, callback_data: ChatInfoCbData, 
     await callback.message.edit_text(
         text=await get_chat_info_text(session, found_chat),
         reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True
     )
     await callback.answer()
 
@@ -145,7 +150,8 @@ async def change_allowed_members(callback: CallbackQuery, callback_data: ChatSet
         await callback.message.edit_text(
             text=await get_chat_info_text(session, found_chat),
             reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
-            parse_mode=ParseMode.HTML
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
         )
     await callback.answer()
 
@@ -166,7 +172,8 @@ async def change_arab_filter_flag(callback: CallbackQuery, callback_data: ChatSe
     await callback.message.edit_text(
         text=await get_chat_info_text(session, found_chat),
         reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True
     )
     await callback.answer()
 
@@ -212,7 +219,8 @@ async def make_delete_cancel(callback: CallbackQuery, callback_data: ChatSetting
         await callback.message.edit_text(
             text=await get_chat_info_text(session, found_chat),
             reply_markup=get_chat_settings_menu(found_chat.id, bool(found_chat.arab_filter_flag)),
-            parse_mode=ParseMode.HTML
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
         )
     await callback.answer()
 

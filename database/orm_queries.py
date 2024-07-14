@@ -21,8 +21,8 @@ async def find_chat_by_id(session: AsyncSession, _id: int) -> Chat:
     return found_chat
 
 
-async def add_chat(session: AsyncSession, telegram_id: str, title: str) -> Chat:
-    chat = Chat(telegram_id=telegram_id, title=title)
+async def add_chat(session: AsyncSession, telegram_id: str, title: str, username: str) -> Chat:
+    chat = Chat(telegram_id=telegram_id, title=title, username=username)
     session.add(chat)
     await session.commit()
     return chat
